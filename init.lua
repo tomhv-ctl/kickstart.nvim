@@ -818,6 +818,7 @@ require('lazy').setup({
             -- set group index to 0 to skip loading LuaLS completions as lazydev recommends it
             group_index = 0,
           },
+          { name = 'copilot' },
           { name = 'nvim_lsp' },
           { name = 'luasnip' },
           { name = 'path' },
@@ -936,6 +937,7 @@ require('lazy').setup({
   -- require 'kickstart.plugins.autopairs',
   -- require 'kickstart.plugins.neo-tree',
   -- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
+  require 'kickstart.plugins.copilot',
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --    This is the easiest way to modularize your config.
@@ -965,5 +967,60 @@ require('lazy').setup({
   },
 })
 
+local has_telescope, telescope = pcall(require, 'telescope.builtin')
+if not has_telescope then
+  print 'Telescope not installed'
+  return
+end
+
+vim.keymap.set('n', '<leader>ar', function()
+  local filepath = vim.fn.expand '%:p' -- full path of current file
+  local fname = vim.fn.expand '%:t' -- filename
+  local root = vim.fn.getcwd() -- project root
+
+  -- detect module: src/<Module>/...
+  local module = filepath:match(root .. '/src/([^/]+)/')
+  if not module then
+    print 'Cannot detect module'
+    return
+  end
+
+  -- base name: strip common suffixes
+  local base = fname:gsub('Handler%.php$', ''):gsub('Controller%.php$', ''):gsub('Listener%.php$', ''):gsub('%.php$', '')
+
+  -- search pattern for all related files in this module
+  local scan_path = root .. '/src/' .. module
+
+  require('telescope.builtin').find_files {
+    prompt_title = 'Related Files (' .. module .. ')',
+    cwd = scan_path,
+    hidden = true,
+    -- match any file starting with the base name
+    search_dirs = { scan_path },
+    find_command = { 'fd', '--type', 'f', base },
+  }
+end, { desc = 'Pick related file in module' })
+
+-- Jump between Foo.php and FooHandler.php
+-- added by Tom HV on 2025-08-22
+vim.keymap.set('n', '<leader>ch', function()
+  local current = vim.fn.expand '%:t' -- filename
+  local path = vim.fn.expand '%:p:h' -- directory
+  local target
+
+  if current:match 'Handler%.php$' then
+    -- Remove "Handler" to get base
+    target = current:gsub('Handler%.php$', '.php')
+  elseif current:match '%.php$' then
+    -- Add "Handler" before .php
+    target = current:gsub('%.php$', 'Handler.php')
+  end
+
+  if target and target ~= current then
+    vim.cmd('edit ' .. path .. '/' .. target)
+  else
+    print 'Not a base/handler file'
+  end
+end, { desc = 'Jump between base PHP file and its Handler' })
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
